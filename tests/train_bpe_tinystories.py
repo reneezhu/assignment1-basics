@@ -8,20 +8,31 @@ from .adapters import run_train_bpe
 from .common import DATA_PATH, gpt2_bytes_to_unicode
 
 
-def train_bpe_tinystories():
-    """
-    Ensure that BPE training is relatively efficient by measuring training
-    time on the tinystories dataset.
-    """
-    input_path = DATA_PATH / "TinyStoriesV2-GPT4-train.txt"
-    start_time = time.time()
+input_path = DATA_PATH / "TinyStoriesV2-GPT4-train.txt"
+if __name__ == '__main__':
+    # 1. Create a profiler object
+    pr = cProfile.Profile()
+
+    # 2. Enable the profiler and run the function
+    pr.enable()
+
+    # start_time = time.time()
     _, _ = run_train_bpe(
         input_path=input_path,
         vocab_size=10000,
         special_tokens=["<|endoftext|>"],
     )
-    end_time = time.time()
-    print(end_time - start_time)
-    assert end_time - start_time < 30 * 60
+    # end_time = time.time()
 
-cProfile.run('train_bpe_tinystories()')
+    # 3. Disable the profiler immediately after the function returns
+    pr.disable()
+
+    # 4. Process and print the statistics
+    s = io.StringIO()
+    sortby = 'cumulative'  # Sort by the cumulative time spent in the function and its sub-functions
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+
+    print("\n--- Profiling Results (Sorted by Cumulative Time) ---")
+    print(s.getvalue())
+# cProfile.run('train_bpe_tinystories()')

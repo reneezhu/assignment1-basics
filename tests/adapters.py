@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import multiprocessing
 import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
+from collections import Counter
 
-from cs336_basics.bpe import find_chunk_boundaries, train_bpe, split_chunk, pretokenization
+from cs336_basics.bpe import find_chunk_boundaries, train_bpe, pretokenize_file_chunk
 
 import numpy.typing as npt
 import torch
@@ -592,7 +594,7 @@ def run_train_bpe(
                 Merges are ordered by order of creation.
     """
     with open(input_path, "rb") as f:
-        num_processes = 1
+        num_processes = 4
         boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
         # 0 is the "<|endoftext|>" token， 1-256 representing the bytes
         vocab = {}
@@ -601,13 +603,18 @@ def run_train_bpe(
         # The following is a serial implementation, but you can parallelize this
         # by sending each start/end pair to a set of processes.
         print(boundaries)
+
+        args_iterable = []
         for start, end in zip(boundaries[:-1], boundaries[1:]):
-            f.seek(start) 
-            chunk = f.read(end - start).decode("utf-8", errors="ignore")
-            # Run pre-tokenization on your chunk and store the counts for each pre-token
-            # Split the chunk by speical token
-            docs = split_chunk(chunk, special_tokens)
-            pretokens = pretokenization(docs)
-            print("Pretokenization Done.")
-            vocab, merge = train_bpe(pretokens, vocab_size, special_tokens)
+            # The arguments for pretokenize_file_chunk: (f, start, end, special_tokens)
+            args_iterable.append((input_path, start, end, special_tokens))
+
+        with multiprocessing.Pool() as pool:
+            results = pool.starmap(pretokenize_file_chunk, args_iterable)
+
+        print("Subprocess Done, Start merge results.")
+
+        pretokens = sum((Counter(d) for d in results), Counter())
+        ("Pretokenization Done.")
+        vocab, merge = train_bpe(pretokens, vocab_size, special_tokens)
         return vocab, merge

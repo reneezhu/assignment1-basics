@@ -176,7 +176,7 @@ def train_bpe(pretokens: dict[Pretoken, int], vocab_size: int, special_tokens: l
         vocab[new_token_id] = merged_token
         apply_merge(pretokens, pair_count, pair_to_pretoken_map, max_pair, new_token_id)
         if (len(vocab) % 100 == 0):
-            print("Current vocab size: %d", len(vocab))
+            print(f"Current vocab size: {len(vocab)}")
     return vocab, merges
 
         
@@ -198,6 +198,17 @@ def pretokenization(docs: list[str]) -> dict[Pretoken, int]:
                 str_to_pretokens_map[pretoken_str] = pretoken
     return pretokens
 
+def pretokenize_file_chunk(input_path, start, end, special_tokens):
+    pid = os.getpid()
+    print(f"Process {pid}: Pretokenizing chunk from {start} to {end}...")
+    with open(input_path, "rb") as f:
+        f.seek(start) 
+        chunk = f.read(end - start).decode("utf-8", errors="ignore")
+        # Run pre-tokenization on your chunk and store the counts for each pre-token
+        # Split the chunk by speical token
+        docs = split_chunk(chunk, special_tokens)
+
+    return pretokenization(docs)
     
     
     
