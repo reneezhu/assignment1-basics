@@ -1,5 +1,8 @@
 import json
 import time
+import cProfile
+import pstats
+import io
 
 from .adapters import run_train_bpe
 from .common import FIXTURES_PATH, gpt2_bytes_to_unicode
@@ -21,6 +24,7 @@ def test_train_bpe_speed():
         special_tokens=["<|endoftext|>"],
     )
     end_time = time.time()
+    print(end_time - start_time)
     assert end_time - start_time < 1.5
 
 
@@ -31,6 +35,7 @@ def test_train_bpe():
         vocab_size=500,
         special_tokens=["<|endoftext|>"],
     )
+    print(input_path)
 
     # Path to the reference tokenizer vocab and merges
     reference_vocab_path = FIXTURES_PATH / "train-bpe-reference-vocab.json"
@@ -68,11 +73,23 @@ def test_train_bpe_special_tokens(snapshot):
     merged with other tokens.
     """
     input_path = FIXTURES_PATH / "tinystories_sample_5M.txt"
+    # pr = cProfile.Profile()
+    # pr.enable()
     vocab, merges = run_train_bpe(
         input_path=input_path,
         vocab_size=1000,
         special_tokens=["<|endoftext|>"],
     )
+    # pr.disable()
+
+    # 3. Process and print the statistics
+    # s = io.StringIO()
+    # sortby = pstats.SortKey.TIME # Sort by time spent *in* the function itself
+    # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    # ps.print_stats()
+
+    # Print the final report
+    # print(s.getvalue())
 
     # Check that the special token is not in the vocab
     vocabs_without_specials = [word for word in vocab.values() if word != b"<|endoftext|>"]

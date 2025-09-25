@@ -4,6 +4,8 @@ import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 
+from cs336_basics.bpe import find_chunk_boundaries, train_bpe, split_chunk, pretokenization
+
 import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
@@ -589,4 +591,23 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    with open(input_path, "rb") as f:
+        num_processes = 1
+        boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
+        # 0 is the "<|endoftext|>" token， 1-256 representing the bytes
+        vocab = {}
+        merge = []
+
+        # The following is a serial implementation, but you can parallelize this
+        # by sending each start/end pair to a set of processes.
+        print(boundaries)
+        for start, end in zip(boundaries[:-1], boundaries[1:]):
+            f.seek(start) 
+            chunk = f.read(end - start).decode("utf-8", errors="ignore")
+            # Run pre-tokenization on your chunk and store the counts for each pre-token
+            # Split the chunk by speical token
+            docs = split_chunk(chunk, special_tokens)
+            pretokens = pretokenization(docs)
+            print("Pretokenization Done.")
+            vocab, merge = train_bpe(pretokens, vocab_size, special_tokens)
+        return vocab, merge
