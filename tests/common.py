@@ -5,6 +5,7 @@ from functools import lru_cache
 
 FIXTURES_PATH = (pathlib.Path(__file__).resolve().parent) / "fixtures"
 DATA_PATH = (pathlib.Path(__file__).resolve().parent.parent) / "data"
+OUTPUT_PATH = (pathlib.Path(__file__).resolve().parent.parent) / "tests/outputs"
 
 
 @lru_cache
