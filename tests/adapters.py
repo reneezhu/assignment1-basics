@@ -7,6 +7,7 @@ from typing import IO, Any, BinaryIO
 from collections import Counter
 
 from cs336_basics.bpe import find_chunk_boundaries, train_bpe, pretokenize_file_chunk
+import cs336_basics.tokenizer
 
 import numpy.typing as npt
 import torch
