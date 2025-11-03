@@ -12,7 +12,7 @@ from .adapters import (
     run_rmsnorm,
     run_scaled_dot_product_attention,
     run_transformer_block,
-    run_transformer_lm,
+    # run_transformer_lm,
     run_linear,
     run_embedding,
 )
