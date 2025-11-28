@@ -57,25 +57,28 @@ class RoPE(nn.Module):
         self.theta = theta
         self.d_k = d_k
         self.max_seq_len = max_seq_len
-    
-    def rotation_matrix(self, theta_k):
-        result = torch.zeros(self.d_k, self.d_k)
-        for k in range(1, theta_k.shape[0] + 1):
-            result[2*k-2][2*k-2] = torch.cos(theta_k[k-1])
-            result[2*k-1][2*k-2] = -torch.sin(theta_k[k-1])
-            result[2*k-2][2*k-1] = torch.sin(theta_k[k-1])
-            result[2*k-1][2*k-1] = torch.cos(theta_k[k-1])
-        return result
 
-    def forward(self, x: torch.Tensor, token_positions: torch.Tensor):
+        # Precompute the sin & cos for all position
         k = torch.arange(1, self.d_k/2 + 1)
         theta_k = 1 / self.theta**((2*k - 2)/self.d_k)
-        r = [] # (max_seq_len, d_k, d_k)
-        for i in torch.arange(self.max_seq_len):
-            R_i = self.rotation_matrix(theta_k * i)
-            r.append(R_i)
-        result = torch.zeros(x.shape)
-        for b, sequence in enumerate(x):
-            for x in range(sequence.shape[0]):
-                result[b][x] = sequence[x] @ r[token_positions[x]]
-        return result
+        positions = torch.arange(max_seq_len).unsqueeze(-1)  # (max_seq_len, 1)
+        angles = positions * theta_k  # (max_seq_len, d_k/2)
+        self.register_buffer("sin", angles.sin(), persistent=False)  # (max_seq_len, d_k/2)
+        self.register_buffer("cos", angles.cos(), persistent=False)  # (max_seq_len, d_k/2)
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor):
+        sin_pos = self.sin[token_positions]
+        cos_pos = self.cos[token_positions]
+        
+        # Consider a pair [x_even, x_odd], R = [[cos, -sin],[sin, cos]]
+        # After the transformation, the pari becomes
+        # [x_even * cos - x_odd * sin, x_even * sin + x_odd * cos]
+        x_even = x[..., 0::2]
+        x_odd = x[..., 1::2]
+        x_rot_even = x_even * cos_pos - x_odd * sin_pos
+        x_rot_odd = x_even * sin_pos + x_odd * cos_pos
+        
+        # Stack the even and odd parts back together along the last dimension and reshape
+        x_rot = torch.stack([x_rot_even, x_rot_odd], dim=-1).reshape(*x.shape[:-1], -1)
+        
+        return x_rot
