@@ -8,10 +8,12 @@ from collections import Counter
 
 from cs336_basics.bpe import find_chunk_boundaries, train_bpe, pretokenize_file_chunk
 from cs336_basics.tokenizer import Tokenizer
-from cs336_basics.model import Linear, Embedding, RMSNorm, SwiGLU, RoPE
+from cs336_basics.model import Linear, Embedding, RMSNorm, SwiGLU, RoPE, MultiHeadAttention
+from cs336_basics.model import softmax, scaled_dot_product_attention
 
 import numpy.typing as npt
 import torch
+import math
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
@@ -117,7 +119,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    return scaled_dot_product_attention(Q, K, V, mask)
 
 
 def run_multihead_self_attention(
@@ -151,7 +153,10 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    attn = MultiHeadAttention(d_model, num_heads)
+    attn.load_state_dict({'w_q': q_proj_weight, 'w_k': k_proj_weight, 'w_v': v_proj_weight, 'w_o': o_proj_weight})
+    return attn.forward(in_features)
+    
 
 
 def run_multihead_self_attention_with_rope(
@@ -191,7 +196,9 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    attn = MultiHeadAttention(d_model, num_heads, max_seq_length=max_seq_len, theta=theta)
+    attn.load_state_dict({'w_q': q_proj_weight, 'w_k': k_proj_weight, 'w_v': v_proj_weight, 'w_o': o_proj_weight})
+    return attn.forward(in_features)
 
 
 def run_rope(
@@ -287,7 +294,27 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    
+    prenorm = RMSNorm(d_model)
+    prenorm.load_state_dict({'g': weights['ln1.weight']})
+    attention = MultiHeadAttention(d_model, num_heads, max_seq_length=max_seq_len, theta=theta)
+    attention.load_state_dict({
+        'w_q': weights[ 'attn.q_proj.weight'],
+        'w_k': weights[ 'attn.k_proj.weight'],
+        'w_v': weights[ 'attn.v_proj.weight'],
+        'w_o': weights[ 'attn.output_proj.weight']})
+    
+    postnorm = RMSNorm(d_model)
+    postnorm.load_state_dict({'g': weights['ln2.weight']})
+    ffw = SwiGLU(d_model, d_ff)
+    ffw.load_state_dict({
+        'w1': weights['ffn.w1.weight'],
+        'w2': weights['ffn.w2.weight'],
+        'w3': weights['ffn.w3.weight']})
+    
+    att_add_output = in_features + attention.forward(prenorm.forward(in_features))
+    fww_add_output = att_add_output + ffw.forward(postnorm.forward(att_add_output))
+    return fww_add_output
 
 
 # def run_transformer_lm(
@@ -447,14 +474,13 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
-
+    softmax(in_features, dim)
 
 def run_cross_entropy(
     inputs: Float[Tensor, " batch_size vocab_size"], targets: Int[Tensor, " batch_size"]
 ) -> Float[Tensor, ""]:
     """Given a tensor of inputs and targets, compute the average cross-entropy
-    loss across examples.
+    loss across examples. 
 
     Args:
         inputs (Float[Tensor, "batch_size vocab_size"]): inputs[i][j] is the
